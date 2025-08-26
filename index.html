@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подкаст «Алло, Пушкин!»</title>
+    <!-- Подключаем Tailwind CSS для стилей -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Подключаем шрифт Inter с Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Применяем шрифт Inter ко всему тексту */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Стиль для полосы прокрутки */
+        .scollable-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scollable-container::-webkit-scrollbar-track {
+            background: #f1f5f9; /* bg-slate-100 */
+            border-radius: 10px;
+        }
+        .scollable-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* bg-slate-300 */
+            border-radius: 10px;
+        }
+        .scollable-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; /* bg-slate-400 */
+        }
+    </style>
+</head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4 sm:p-6 md:p-8">
+
+    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl p-6 sm:p-8 flex flex-col items-center">
+
+        <!-- Header section -->
+        <header class="text-center mb-6">
+            <h1 class="text-4xl sm:text-5xl font-bold text-slate-800 tracking-tight">
+                Алло, Пушкин!
+            </h1>
+            <p class="text-lg sm:text-xl text-slate-500 mt-2">
+                Подкаст о русской классике, которая не классика.
+            </p>
+        </header>
+
+        <!-- Loading indicator -->
+        <div id="loading" class="text-slate-500 text-lg sm:text-xl mt-12 animate-pulse">
+            Загрузка подкастов...
+        </div>
+
+        <!-- Episode list container -->
+        <div id="episodes-container" class="scollable-container w-full max-h-[60vh] overflow-y-auto space-y-4">
+            <!-- Episode cards will be dynamically inserted here by JavaScript -->
+        </div>
+
+        <!-- Audio player section -->
+        <div id="audio-player-container" class="w-full mt-6 transition-all duration-300 transform scale-y-0 opacity-0 origin-bottom">
+            <h2 class="text-xl font-semibold text-slate-700 mb-2 truncate">
+                <span id="player-title"></span>
+            </h2>
+            <audio id="audio-player" class="w-full rounded-full" controls></audio>
+        </div>
+
+    </div>
+
+    <script>
+        // Self-contained JavaScript code to fetch and render the podcast episodes.
+
+        // Define the RSS feed URL.
+        const RSS_URL = 'https://cloud.mave.digital/65512';
+        // Use a CORS proxy to bypass cross-origin restrictions.
+        const PROXY_URL = `https://corsproxy.io/?${encodeURIComponent(RSS_URL)}`;
+
+        // Get HTML elements
+        const loadingElement = document.getElementById('loading');
+        const episodesContainer = document.getElementById('episodes-container');
+        const audioPlayerContainer = document.getElementById('audio-player-container');
+        const audioPlayer = document.getElementById('audio-player');
+        const playerTitle = document.getElementById('player-title');
+
+        /**
+         * Fetches and parses the podcast RSS feed.
+         */
+        async function fetchPodcastEpisodes() {
+            try {
+                // Fetch the RSS feed via the proxy.
+                const response = await fetch(PROXY_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const xmlText = await response.text();
+
+                // Parse the XML text into a DOM object.
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
+
+                // Get all episode items from the XML document.
+                const items = xmlDoc.querySelectorAll('item');
+
+                // Hide the loading indicator.
+                loadingElement.classList.add('hidden');
+
+                // Check if there are any episodes.
+                if (items.length === 0) {
+                    episodesContainer.innerHTML = '<p class="text-center text-slate-500 mt-8">Не удалось загрузить выпуски.</p>';
+                    return;
+                }
+
+                // Process and display each episode.
+                items.forEach(item => {
+                    const title = item.querySelector('title')?.textContent || 'Нет названия';
+                    const description = item.querySelector('description')?.textContent || 'Нет описания';
+                    const audioUrl = item.querySelector('enclosure')?.getAttribute('url');
+
+                    // Only render episodes that have an audio URL.
+                    if (audioUrl) {
+                        renderEpisode(title, description, audioUrl);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching or parsing RSS feed:', error);
+                loadingElement.innerText = 'Произошла ошибка при загрузке. Попробуйте обновить страницу.';
+                loadingElement.classList.remove('animate-pulse');
+            }
+        }
+
+        /**
+         * Creates and appends an episode card to the container.
+         * @param {string} title - The title of the podcast episode.
+         * @param {string} description - The description of the episode.
+         * @param {string} audioUrl - The URL of the audio file.
+         */
+        function renderEpisode(title, description, audioUrl) {
+            // Create a container for the episode card.
+            const episodeCard = document.createElement('div');
+            episodeCard.classList.add(
+                'bg-slate-100', 'p-4', 'rounded-xl', 'cursor-pointer', 'transition-transform', 'duration-200',
+                'hover:scale-[1.01]', 'hover:shadow-md', 'active:scale-95'
+            );
+
+            // Add a click event listener to play the episode.
+            episodeCard.addEventListener('click', () => {
+                playEpisode(title, audioUrl);
+            });
+
+            // Create the episode title element.
+            const episodeTitle = document.createElement('h3');
+            episodeTitle.classList.add('text-lg', 'font-semibold', 'text-slate-800', 'truncate');
+            episodeTitle.innerText = title;
+
+            // Create the episode description element.
+            const episodeDescription = document.createElement('p');
+            episodeDescription.classList.add('text-sm', 'text-slate-500', 'mt-1', 'line-clamp-2');
+            // Remove HTML tags from the description for a cleaner display.
+            const cleanDescription = description.replace(/<[^>]*>/g, '').trim();
+            episodeDescription.innerText = cleanDescription;
+
+            // Append title and description to the card.
+            episodeCard.appendChild(episodeTitle);
+            episodeCard.appendChild(episodeDescription);
+
+            // Append the finished card to the main container.
+            episodesContainer.appendChild(episodeCard);
+        }
+
+        /**
+         * Updates the audio player and plays the selected episode.
+         * @param {string} title - The title of the episode to play.
+         * @param {string} audioUrl - The URL of the audio file.
+         */
+        function playEpisode(title, audioUrl) {
+            // Show the audio player if it's hidden.
+            audioPlayerContainer.classList.remove('scale-y-0', 'opacity-0');
+            audioPlayerContainer.classList.add('scale-y-100', 'opacity-100');
+
+            // Update the title and audio source.
+            playerTitle.innerText = title;
+            audioPlayer.src = audioUrl;
+
+            // Load and play the audio.
+            audioPlayer.load();
+            audioPlayer.play().catch(error => {
+                // Catch and log the error if playback fails (e.g., user interaction required).
+                console.log("Audio playback was blocked. User interaction required.");
+            });
+        }
+
+        // Call the main function to start fetching episodes when the page loads.
+        window.onload = fetchPodcastEpisodes;
+    </script>
+</body>
+</html>
